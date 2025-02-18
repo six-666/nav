@@ -235,10 +235,12 @@ app.post('/api/collect/get', async (req, res) => {
     const collects = getCollects()
     res.json({
       data: collects,
+      count: collects.length,
     })
   } catch (error) {
     return res.json({
       data: [],
+      count: 0,
       message: error.message,
     })
   }
