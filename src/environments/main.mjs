@@ -3,6 +3,7 @@
 // 开源项目，未经作者同意，不得以抄袭/复制代码/修改源代码版权信息。
 // Copyright @ 2018-present xiejiahe. All rights reserved.
 // See https://github.com/xjh22222228/nav
+
 import express from 'express'
 import cors from 'cors'
 import fs from 'node:fs'
@@ -23,9 +24,7 @@ import {
   writeTemplate,
 } from '../../scripts/util.mjs'
 
-const joinPath = (p) => {
-  return path.resolve(process.cwd(), p)
-}
+const joinPath = (p) => path.resolve(process.cwd(), p)
 
 const UPLOAD_FOLDER_PATH = joinPath('_upload/images')
 const DB_PATH = joinPath('data/db.json')
@@ -36,27 +35,20 @@ const COLLECT_PATH = joinPath('data/collect.json')
 const COMPONENT_PATH = joinPath('data/component.json')
 const ENTRY_INDEX_HTML = joinPath('dist/browser/index.html')
 
-function getConfigJson() {
-  return yaml.load(fs.readFileSync(joinPath('nav.config.yaml')))
-}
-
+const getConfigJson = () =>
+  yaml.load(fs.readFileSync(joinPath('nav.config.yaml')))
 const PORT = getConfigJson().port
 
-function getSettings() {
-  return JSON.parse(fs.readFileSync(SETTINGS_PATH).toString())
-}
-function getCollects() {
+const getSettings = () => JSON.parse(fs.readFileSync(SETTINGS_PATH).toString())
+const getCollects = () => {
   try {
     const data = JSON.parse(fs.readFileSync(COLLECT_PATH).toString())
-    if (!Array.isArray(data)) {
-      return []
-    }
-    return data
+    return Array.isArray(data) ? data : []
   } catch {
     return []
   }
 }
-function getComponents() {
+const getComponents = () => {
   try {
     return JSON.parse(fs.readFileSync(COMPONENT_PATH).toString())
   } catch {
@@ -65,12 +57,16 @@ function getComponents() {
 }
 
 try {
-  fs.chmodSync(DB_PATH, 0o777)
-  fs.chmodSync(SETTINGS_PATH, 0o777)
-  fs.chmodSync(TAG_PATH, 0o777)
-  fs.chmodSync(SEARCH_PATH, 0o777)
-  fs.chmodSync(ENTRY_INDEX_HTML, 0o777)
-  fs.chmodSync(COMPONENT_PATH, 0o777)
+  ;[
+    DB_PATH,
+    SETTINGS_PATH,
+    TAG_PATH,
+    SEARCH_PATH,
+    ENTRY_INDEX_HTML,
+    COMPONENT_PATH,
+  ].forEach((path) => {
+    fs.chmodSync(path, 0o777)
+  })
 } catch (error) {
   console.log(error.message)
 }
