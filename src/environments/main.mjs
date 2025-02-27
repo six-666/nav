@@ -113,8 +113,7 @@ async function sendMail() {
 function verifyMiddleware(req, res, next) {
   const token = req.headers['authorization']
   if (token !== `token ${getConfigJson().password}`) {
-    res.status(401)
-    return res.json({
+    return res.status(401).json({
       status: 401,
       message: 'Bad credentials',
     })
@@ -149,8 +148,7 @@ app.post('/api/contents/update', verifyMiddleware, (req, res) => {
 
     res.json({})
   } catch (error) {
-    res.status(500)
-    res.json({
+    res.status(500).json({
       message: error.message,
     })
   }
@@ -172,8 +170,7 @@ app.post('/api/contents/create', verifyMiddleware, (req, res) => {
       imagePath: path.join('/', 'images', filePath),
     })
   } catch (error) {
-    res.status(500)
-    res.json({
+    res.status(500).json({
       message: error.message,
     })
   }
@@ -200,8 +197,7 @@ app.post('/api/contents/get', (req, res) => {
     params.webs = setWeb(params.webs, params.settings, params.tags)
     return res.json(params)
   } catch (error) {
-    res.status(500)
-    res.json({
+    res.status(500).json({
       message: error.message,
     })
   }
@@ -219,8 +215,7 @@ app.post('/api/spider', async (req, res) => {
       time,
     })
   } catch (error) {
-    res.status(500)
-    res.json({
+    res.status(500).json({
       message: error.message,
     })
   }
@@ -297,8 +292,7 @@ app.post('/api/web/info', async (req, res) => {
       message: data.errorMsg,
     })
   } catch (error) {
-    res.status(500)
-    return res.json({
+    return res.status(500).json({
       message: error.message,
     })
   }
