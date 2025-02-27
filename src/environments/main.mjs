@@ -267,7 +267,7 @@ app.post('/api/collect/save', async (req, res) => {
       console.log(e.message)
     })
   } catch (error) {
-    return res.json({
+    return res.status(500).json({
       message: error.message,
     })
   }
