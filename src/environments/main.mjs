@@ -250,7 +250,7 @@ app.post('/api/collect/save', async (req, res) => {
   try {
     const { data } = req.body
     data.extra.uuid = Date.now()
-    data.createdAt = dayjs(data.createdAt).format('YYYY-MM-DD HH:mm')
+    data.createdAt = dayjs().format('YYYY-MM-DD HH:mm')
     const collects = getCollects()
     collects.unshift(data)
     fs.writeFileSync(PATHS.collect, JSON.stringify(collects))
