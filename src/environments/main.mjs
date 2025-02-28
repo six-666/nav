@@ -8,7 +8,6 @@ import express from 'express'
 import cors from 'cors'
 import fs from 'node:fs'
 import path from 'node:path'
-import process from 'node:process'
 import bodyParser from 'body-parser'
 import history from 'connect-history-api-fallback'
 import compression from 'compression'
@@ -22,27 +21,18 @@ import {
   spiderWeb,
   writeSEO,
   writeTemplate,
+  PATHS,
 } from '../../scripts/util.mjs'
 
-const joinPath = (p) => path.resolve(process.cwd(), p)
+const joinPath = (p) => path.resolve(p)
 
-const UPLOAD_FOLDER_PATH = joinPath('_upload/images')
-const DB_PATH = joinPath('data/db.json')
-const SETTINGS_PATH = joinPath('data/settings.json')
-const TAG_PATH = joinPath('data/tag.json')
-const SEARCH_PATH = joinPath('data/search.json')
-const COLLECT_PATH = joinPath('data/collect.json')
-const COMPONENT_PATH = joinPath('data/component.json')
-const ENTRY_INDEX_HTML = joinPath('dist/browser/index.html')
-
-const getConfigJson = () =>
-  yaml.load(fs.readFileSync(joinPath('nav.config.yaml')))
+const getConfigJson = () => yaml.load(fs.readFileSync(PATHS.config))
 const PORT = getConfigJson().port
 
-const getSettings = () => JSON.parse(fs.readFileSync(SETTINGS_PATH).toString())
+const getSettings = () => JSON.parse(fs.readFileSync(PATHS.settings).toString())
 const getCollects = () => {
   try {
-    const data = JSON.parse(fs.readFileSync(COLLECT_PATH).toString())
+    const data = JSON.parse(fs.readFileSync(PATHS.collect).toString())
     return Array.isArray(data) ? data : []
   } catch {
     return []
@@ -50,7 +40,7 @@ const getCollects = () => {
 }
 const getComponents = () => {
   try {
-    return JSON.parse(fs.readFileSync(COMPONENT_PATH).toString())
+    return JSON.parse(fs.readFileSync(PATHS.component).toString())
   } catch {
     return []
   }
@@ -58,12 +48,12 @@ const getComponents = () => {
 
 try {
   ;[
-    DB_PATH,
-    SETTINGS_PATH,
-    TAG_PATH,
-    SEARCH_PATH,
-    ENTRY_INDEX_HTML,
-    COMPONENT_PATH,
+    PATHS.db,
+    PATHS.settings,
+    PATHS.tag,
+    PATHS.search,
+    PATHS.html.index,
+    PATHS.component,
   ].forEach((path) => {
     fs.chmodSync(path, 0o777)
   })
@@ -73,9 +63,9 @@ try {
 
 // Create user collect
 try {
-  fs.accessSync(COLLECT_PATH, fs.constants.F_OK)
+  fs.accessSync(PATHS.collect, fs.constants.F_OK)
 } catch (error) {
-  fs.writeFileSync(COLLECT_PATH, '[]')
+  fs.writeFileSync(PATHS.collect, '[]')
   console.log(error.message)
 }
 
@@ -131,10 +121,10 @@ app.post('/api/contents/update', verifyMiddleware, (req, res) => {
     fs.writeFileSync(joinPath(path), content)
 
     if (path.includes('settings.json')) {
-      const isExistsindexHtml = fs.existsSync(ENTRY_INDEX_HTML)
+      const isExistsindexHtml = fs.existsSync(PATHS.html.index)
       if (isExistsindexHtml) {
-        const indexHtml = fs.readFileSync(ENTRY_INDEX_HTML).toString()
-        const webs = JSON.parse(fs.readFileSync(DB_PATH).toString())
+        const indexHtml = fs.readFileSync(PATHS.html.index).toString()
+        const webs = JSON.parse(fs.readFileSync(PATHS.db).toString())
         const settings = getSettings()
         const seoTemplate = writeSEO(webs, { settings })
         const html = writeTemplate({
@@ -142,7 +132,7 @@ app.post('/api/contents/update', verifyMiddleware, (req, res) => {
           settings,
           seoTemplate,
         })
-        fs.writeFileSync(ENTRY_INDEX_HTML, html)
+        fs.writeFileSync(PATHS.html.index, html)
       }
     }
 
@@ -158,13 +148,13 @@ app.post('/api/contents/create', verifyMiddleware, (req, res) => {
   const { path: filePath, content } = req.body
   try {
     try {
-      fs.statSync(UPLOAD_FOLDER_PATH)
+      fs.statSync(PATHS.upload)
     } catch (error) {
-      fs.mkdirSync(UPLOAD_FOLDER_PATH, { recursive: true })
+      fs.mkdirSync(PATHS.upload, { recursive: true })
     }
 
     const dataBuffer = Buffer.from(content, 'base64')
-    const uploadPath = path.join(UPLOAD_FOLDER_PATH, filePath)
+    const uploadPath = path.join(PATHS.upload, filePath)
     fs.writeFileSync(uploadPath, dataBuffer)
     res.json({
       imagePath: path.join('/', 'images', filePath),
@@ -186,11 +176,11 @@ app.post('/api/contents/get', (req, res) => {
     components: [],
   }
   try {
-    params.webs = JSON.parse(fs.readFileSync(DB_PATH).toString())
+    params.webs = JSON.parse(fs.readFileSync(PATHS.db).toString())
     params.settings = getSettings()
     params.components = getComponents()
-    params.tags = JSON.parse(fs.readFileSync(TAG_PATH).toString())
-    params.search = JSON.parse(fs.readFileSync(SEARCH_PATH).toString())
+    params.tags = JSON.parse(fs.readFileSync(PATHS.tag).toString())
+    params.search = JSON.parse(fs.readFileSync(PATHS.search).toString())
     const { userViewCount, loginViewCount } = getWebCount(params.webs)
     params.internal.userViewCount = userViewCount
     params.internal.loginViewCount = loginViewCount
@@ -205,12 +195,12 @@ app.post('/api/contents/get', (req, res) => {
 
 app.post('/api/spider', async (req, res) => {
   try {
-    const webs = JSON.parse(fs.readFileSync(DB_PATH).toString())
+    const webs = JSON.parse(fs.readFileSync(PATHS.db).toString())
     const settings = getSettings()
     const { time, webs: w, errorUrlCount } = await spiderWeb(webs, settings)
     settings.errorUrlCount = errorUrlCount
-    fs.writeFileSync(DB_PATH, JSON.stringify(w))
-    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings))
+    fs.writeFileSync(PATHS.db, JSON.stringify(w))
+    fs.writeFileSync(PATHS.settings, JSON.stringify(settings))
     return res.json({
       time,
     })
@@ -240,10 +230,11 @@ app.post('/api/collect/get', async (req, res) => {
 app.post('/api/collect/delete', async (req, res) => {
   try {
     const { data } = req.body
-    const collects = getCollects().filter((item) => {
-      return item.extra.uuid !== data.extra.uuid
+    const collects = getCollects().filter((e) => {
+      const has = data.some((item) => item.extra.uuid === e.extra.uuid)
+      return !has
     })
-    fs.writeFileSync(COLLECT_PATH, JSON.stringify(collects))
+    fs.writeFileSync(PATHS.collect, JSON.stringify(collects))
     res.json({
       data: collects,
     })
@@ -262,7 +253,7 @@ app.post('/api/collect/save', async (req, res) => {
     data.createdAt = dayjs(data.createdAt).format('YYYY-MM-DD HH:mm')
     const collects = getCollects()
     collects.unshift(data)
-    fs.writeFileSync(COLLECT_PATH, JSON.stringify(collects))
+    fs.writeFileSync(PATHS.collect, JSON.stringify(collects))
     sendMail().catch((e) => {
       console.log(e.message)
     })
