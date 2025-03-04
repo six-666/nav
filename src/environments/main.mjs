@@ -17,7 +17,7 @@ import getWebInfo from 'info-web'
 import yaml from 'js-yaml'
 import {
   getWebCount,
-  setWeb,
+  setWebs,
   spiderWeb,
   writeSEO,
   writeTemplate,
@@ -184,7 +184,7 @@ app.post('/api/contents/get', (req, res) => {
     const { userViewCount, loginViewCount } = getWebCount(params.webs)
     params.internal.userViewCount = userViewCount
     params.internal.loginViewCount = loginViewCount
-    params.webs = setWeb(params.webs, params.settings, params.tags)
+    params.webs = setWebs(params.webs, params.settings, params.tags)
     return res.json(params)
   } catch (error) {
     res.status(500).json({
