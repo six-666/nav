@@ -4,7 +4,7 @@
 // Copyright @ 2018-present xiejiahe. All rights reserved.
 // See https://github.com/xjh22222228/nav
 
-import express from 'express'
+import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -22,25 +22,36 @@ import {
   writeSEO,
   writeTemplate,
   PATHS,
-} from '../../scripts/util.mjs'
+} from '../../scripts/utils'
+import {
+  ISettings,
+  INavProps,
+  IWebProps,
+  ITagPropValues,
+  ISearchProps,
+  InternalProps,
+} from '../types/index'
+import { SELF_SYMBOL } from '../constants/symbol'
 
-const joinPath = (p) => path.resolve(p)
+const joinPath = (p: string): string => path.resolve(p)
 
-const getConfigJson = () => yaml.load(fs.readFileSync(PATHS.config))
+const getConfigJson = () =>
+  yaml.load(fs.readFileSync(PATHS.config, 'utf8')) as any
 const PORT = getConfigJson().port
 
-const getSettings = () => JSON.parse(fs.readFileSync(PATHS.settings).toString())
-const getCollects = () => {
+const getSettings = () =>
+  JSON.parse(fs.readFileSync(PATHS.settings, 'utf8')) as ISettings
+const getCollects = (): IWebProps[] => {
   try {
-    const data = JSON.parse(fs.readFileSync(PATHS.collect).toString())
+    const data = JSON.parse(fs.readFileSync(PATHS.collect, 'utf8'))
     return Array.isArray(data) ? data : []
   } catch {
     return []
   }
 }
-const getComponents = () => {
+const getComponents = (): any[] => {
   try {
-    return JSON.parse(fs.readFileSync(PATHS.component).toString())
+    return JSON.parse(fs.readFileSync(PATHS.component, 'utf8')) as any[]
   } catch {
     return []
   }
@@ -58,7 +69,7 @@ try {
     fs.chmodSync(path, 0o777)
   })
 } catch (error) {
-  console.log(error.message)
+  console.log((error as Error).message)
 }
 
 // Create user collect
@@ -66,7 +77,7 @@ try {
   fs.accessSync(PATHS.collect, fs.constants.F_OK)
 } catch (error) {
   fs.writeFileSync(PATHS.collect, '[]')
-  console.log(error.message)
+  console.log((error as Error).message)
 }
 
 const app = express()
@@ -100,118 +111,141 @@ async function sendMail() {
   })
 }
 
-function verifyMiddleware(req, res, next) {
+function verifyMiddleware(req: Request, res: Response, next: NextFunction) {
   const token = req.headers['authorization']
   if (token !== `token ${getConfigJson().password}`) {
-    return res.status(401).json({
+    res.status(401).json({
       status: 401,
       message: 'Bad credentials',
     })
+    return
   }
   next(false)
 }
 
-app.get('/api/users/verify', verifyMiddleware, (req, res) => {
-  res.json({})
-})
-
-app.post('/api/contents/update', verifyMiddleware, (req, res) => {
-  const { path, content } = req.body
-  try {
-    fs.writeFileSync(joinPath(path), content)
-
-    if (path.includes('settings.json')) {
-      const isExistsindexHtml = fs.existsSync(PATHS.html.index)
-      if (isExistsindexHtml) {
-        const indexHtml = fs.readFileSync(PATHS.html.index).toString()
-        const webs = JSON.parse(fs.readFileSync(PATHS.db).toString())
-        const settings = getSettings()
-        const seoTemplate = writeSEO(webs, { settings })
-        const html = writeTemplate({
-          html: indexHtml,
-          settings,
-          seoTemplate,
-        })
-        fs.writeFileSync(PATHS.html.index, html)
-      }
-    }
-
+app.get(
+  '/api/users/verify',
+  verifyMiddleware,
+  (req: Request, res: Response) => {
     res.json({})
-  } catch (error) {
-    res.status(500).json({
-      message: error.message,
-    })
   }
-})
+)
 
-app.post('/api/contents/create', verifyMiddleware, (req, res) => {
-  const { path: filePath, content } = req.body
-  try {
+app.post(
+  '/api/contents/update',
+  verifyMiddleware,
+  (req: Request, res: Response) => {
+    const { path, content } = req.body
     try {
-      fs.statSync(PATHS.upload)
+      fs.writeFileSync(joinPath(path), content)
+
+      if (path.includes('settings.json')) {
+        const isExistsindexHtml = fs.existsSync(PATHS.html.index)
+        if (isExistsindexHtml) {
+          const indexHtml = fs.readFileSync(PATHS.html.index, 'utf8')
+          const webs = JSON.parse(fs.readFileSync(PATHS.db, 'utf8'))
+          const settings = getSettings()
+          const seoTemplate = writeSEO(webs, { settings })
+          const html = writeTemplate({
+            html: indexHtml,
+            settings,
+            seoTemplate,
+          })
+          fs.writeFileSync(PATHS.html.index, html)
+        }
+      }
+
+      res.json({})
     } catch (error) {
-      fs.mkdirSync(PATHS.upload, { recursive: true })
+      res.status(500).json({
+        message: (error as Error).message,
+      })
     }
-
-    const dataBuffer = Buffer.from(content, 'base64')
-    const uploadPath = path.join(PATHS.upload, filePath)
-    fs.writeFileSync(uploadPath, dataBuffer)
-    res.json({
-      imagePath: path.join('/', 'images', filePath),
-    })
-  } catch (error) {
-    res.status(500).json({
-      message: error.message,
-    })
   }
-})
+)
 
-app.post('/api/contents/get', (req, res) => {
-  const params = {
+app.post(
+  '/api/contents/create',
+  verifyMiddleware,
+  (req: Request, res: Response) => {
+    const { path: filePath, content } = req.body
+    try {
+      try {
+        fs.statSync(PATHS.upload)
+      } catch (error) {
+        fs.mkdirSync(PATHS.upload, { recursive: true })
+      }
+
+      const dataBuffer = Buffer.from(content, 'base64')
+      const uploadPath = path.join(PATHS.upload, filePath)
+      fs.writeFileSync(uploadPath, dataBuffer)
+      res.json({
+        imagePath: path.join('/', 'images', filePath),
+      })
+    } catch (error) {
+      res.status(500).json({
+        message: (error as Error).message,
+      })
+    }
+  }
+)
+
+interface Contents {
+  settings: ISettings
+  webs: INavProps[]
+  tags: ITagPropValues[]
+  search: ISearchProps[]
+  internal: InternalProps
+  components: any[]
+}
+
+app.post('/api/contents/get', (req: Request, res: Response) => {
+  const params: Contents = {
     webs: [],
-    settings: {},
+    settings: {} as ISettings,
     tags: [],
     search: [],
-    internal: {},
+    internal: {} as InternalProps,
     components: [],
   }
   try {
-    params.webs = JSON.parse(fs.readFileSync(PATHS.db).toString())
+    params.webs = JSON.parse(fs.readFileSync(PATHS.db, 'utf8'))
     params.settings = getSettings()
     params.components = getComponents()
-    params.tags = JSON.parse(fs.readFileSync(PATHS.tag).toString())
-    params.search = JSON.parse(fs.readFileSync(PATHS.search).toString())
+    params.tags = JSON.parse(fs.readFileSync(PATHS.tag, 'utf8'))
+    params.search = JSON.parse(fs.readFileSync(PATHS.search, 'utf8'))
     const { userViewCount, loginViewCount } = getWebCount(params.webs)
     params.internal.userViewCount = userViewCount
     params.internal.loginViewCount = loginViewCount
     params.webs = setWebs(params.webs, params.settings, params.tags)
-    return res.json(params)
+    res.json(params)
+    return
   } catch (error) {
     res.status(500).json({
-      message: error.message,
+      message: (error as Error).message,
     })
   }
 })
 
-app.post('/api/spider', async (req, res) => {
+app.post('/api/spider', async (req: Request, res: Response) => {
   try {
-    const webs = JSON.parse(fs.readFileSync(PATHS.db).toString())
+    const webs = JSON.parse(fs.readFileSync(PATHS.db, 'utf8'))
     const settings = getSettings()
     const { time, webs: w, errorUrlCount } = await spiderWeb(webs, settings)
     settings.errorUrlCount = errorUrlCount
     fs.writeFileSync(PATHS.db, JSON.stringify(w))
     fs.writeFileSync(PATHS.settings, JSON.stringify(settings))
-    return res.json({
+    res.json({
       time,
     })
   } catch (error) {
     res.status(500).json({
-      message: error.message,
+      message: (error as Error).message,
     })
   }
 })
 
-app.post('/api/collect/get', async (req, res) => {
+app.post('/api/collect/get', async (req: Request, res: Response) => {
   try {
     const collects = getCollects()
     res.json({
@@ -219,19 +253,21 @@ app.post('/api/collect/get', async (req, res) => {
       count: collects.length,
     })
   } catch (error) {
-    return res.json({
+    res.json({
       data: [],
       count: 0,
-      message: error.message,
+      message: (error as Error).message,
     })
   }
 })
 
-app.post('/api/collect/delete', async (req, res) => {
+app.post('/api/collect/delete', async (req: Request, res: Response) => {
   try {
     const { data } = req.body
     const collects = getCollects().filter((e) => {
-      const has = data.some((item) => item.extra.uuid === e.extra.uuid)
+      const has = data.some(
+        (item: IWebProps) => item['extra'].uuid === e['extra'].uuid
+      )
       return !has
     })
     fs.writeFileSync(PATHS.collect, JSON.stringify(collects))
@@ -239,14 +275,14 @@ app.post('/api/collect/delete', async (req, res) => {
       data: collects,
     })
   } catch (error) {
-    return res.json({
+    res.json({
       data: [],
-      message: error.message,
+      message: (error as Error).message,
     })
   }
 })
 
-app.post('/api/collect/save', async (req, res) => {
+app.post('/api/collect/save', async (req: Request, res: Response) => {
   try {
     const { data } = req.body
     data.extra.uuid = Date.now()
@@ -258,22 +294,23 @@ app.post('/api/collect/save', async (req, res) => {
       console.log(e.message)
     })
   } catch (error) {
-    return res.status(500).json({
-      message: error.message,
+    res.status(500).json({
+      message: (error as Error).message,
     })
+    return
   }
   res.json({
     message: 'OK',
   })
 })
 
-app.post('/api/web/info', async (req, res) => {
+app.post('/api/web/info', async (req: Request, res: Response) => {
   try {
     let url = req.body.url
-    if (url[0] === '!') {
+    if (url[0] === SELF_SYMBOL) {
       url = url.slice(1)
     }
-    const data = await getWebInfo(url, {
+    const data: any = await getWebInfo(url, {
       timeout: 0,
     })
     res.json({
@@ -283,8 +320,8 @@ app.post('/api/web/info', async (req, res) => {
       message: data.errorMsg,
     })
   } catch (error) {
-    return res.status(500).json({
-      message: error.message,
+    res.status(500).json({
+      message: (error as Error).message,
     })
   }
 })
