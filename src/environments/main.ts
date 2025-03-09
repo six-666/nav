@@ -32,6 +32,8 @@ import {
   InternalProps,
 } from '../types/index'
 import { SELF_SYMBOL } from '../constants/symbol'
+import axios from 'axios'
+import { HTTP_BASE_URL } from '../utils/http'
 
 const joinPath = (p: string): string => path.resolve(p)
 
@@ -322,6 +324,52 @@ app.post('/api/web/info', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({
       message: (error as Error).message,
+    })
+  }
+})
+
+app.post('/api/translate', async (req: Request, res: Response) => {
+  const { content, language } = req.body
+
+  try {
+    const token = getConfigJson().XFAPIPassword
+    if (!token) {
+      const { data } = await axios.post(
+        `${HTTP_BASE_URL}/api/translate`,
+        req.body
+      )
+      res.json(data)
+      return
+    }
+
+    const { data } = await axios.post(
+      'https://spark-api-open.xf-yun.com/v1/chat/completions',
+      {
+        model: 'lite',
+        messages: [
+          {
+            role: 'user',
+            content: `${content} 翻译${
+              language === 'zh-CN' ? '中文' : '英文'
+            }，直接返回翻译的内容，如果不能翻译返回原内容`,
+          },
+        ],
+        stream: false,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    )
+
+    res.json({
+      content: data.choices[0].message.content,
+    })
+    return
+  } catch (error: any) {
+    res.status(500).json({
+      message: error.message,
     })
   }
 })
