@@ -23,7 +23,7 @@ import {
   writeTemplate,
   PATHS,
 } from '../../scripts/utils'
-import {
+import type {
   ISettings,
   INavProps,
   IWebProps,
