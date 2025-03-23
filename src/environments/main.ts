@@ -7,6 +7,7 @@
 import express, { Request, Response, NextFunction } from 'express'
 import cors from 'cors'
 import fs from 'node:fs'
+import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import bodyParser from 'body-parser'
 import history from 'connect-history-api-fallback'
@@ -64,20 +65,46 @@ const getComponents = (): any[] => {
   }
 }
 
-try {
-  ;[
+const getWebs = (): any[] => {
+  try {
+    return JSON.parse(fs.readFileSync(PATHS.serverdb, 'utf8')) as any[]
+  } catch {
+    return []
+  }
+}
+
+const writeWebs = (data: any[]) => {
+  fs.writeFileSync(PATHS.db, JSON.stringify(data))
+  fs.writeFileSync(PATHS.serverdb, JSON.stringify(data))
+}
+
+async function changePermissions() {
+  const paths = [
     PATHS.db,
+    PATHS.serverdb,
     PATHS.settings,
     PATHS.tag,
     PATHS.search,
     PATHS.html.index,
     PATHS.component,
-  ].forEach((path) => {
-    fs.chmodSync(path, 0o777)
-  })
-} catch (error) {
-  console.log((error as Error).message)
+    PATHS.upload,
+  ]
+  for (const path of paths) {
+    try {
+      const stats = await fsPromises.stat(path)
+      if ((stats.mode & 0o777) !== 0o777) {
+        await fsPromises.chmod(path, 0o777)
+        console.log(`Permissions changed for ${path}`)
+      } else {
+        console.log(`${path} already has correct permissions`)
+      }
+    } catch (error: any) {
+      console.error(`Error for ${path}: ${error.message}`)
+    }
+  }
 }
+
+changePermissions()
 
 // Create user collect
 try {
@@ -88,7 +115,6 @@ try {
 }
 
 const app = express()
-
 app.use(compression())
 app.use(history())
 app.use(bodyParser.json({ limit: '10000mb' }))
@@ -149,8 +175,8 @@ app.post(
         const isExistsindexHtml = fs.existsSync(PATHS.html.index)
         if (isExistsindexHtml) {
           const indexHtml = fs.readFileSync(PATHS.html.index, 'utf8')
-          const webs = JSON.parse(fs.readFileSync(PATHS.db, 'utf8'))
-          const settings = getSettings()
+          const webs = getWebs()
+          const settings = JSON.parse(content)
           const seoTemplate = writeSEO(webs, { settings })
           const html = writeTemplate({
             html: indexHtml,
@@ -160,9 +186,12 @@ app.post(
           fs.writeFileSync(PATHS.html.index, html)
         }
       } else if (path.includes('db.json')) {
-        content = JSON.stringify(
-          setWebs(JSON.parse(content), getSettings(), getTags())
-        )
+        content = setWebs(JSON.parse(content), getSettings(), getTags())
+        writeWebs(content)
+        res.json({
+          status: true,
+        })
+        return
       }
 
       fs.writeFileSync(joinPath(path), content)
@@ -224,7 +253,7 @@ app.post('/api/contents/get', (req: Request, res: Response) => {
     components: [],
   }
   try {
-    params.webs = JSON.parse(fs.readFileSync(PATHS.db, 'utf8'))
+    params.webs = getWebs()
     params.settings = getSettings()
     params.components = getComponents()
     params.tags = getTags()
@@ -244,11 +273,11 @@ app.post('/api/contents/get', (req: Request, res: Response) => {
 
 app.post('/api/spider', async (req: Request, res: Response) => {
   try {
-    const webs = JSON.parse(fs.readFileSync(PATHS.db, 'utf8'))
+    const webs = getWebs()
     const settings = getSettings()
     const { time, webs: w, errorUrlCount } = await spiderWeb(webs, settings)
     settings.errorUrlCount = errorUrlCount
-    fs.writeFileSync(PATHS.db, JSON.stringify(w))
+    writeWebs(w)
     fs.writeFileSync(PATHS.settings, JSON.stringify(settings))
     res.json({
       time,
