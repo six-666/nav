@@ -37,6 +37,7 @@ import { HTTP_BASE_URL } from '../utils/http'
 import axios from 'axios'
 import sharp from 'sharp'
 import findChrome from 'chrome-finder'
+import { filterLoginData } from '../utils/pureUtils'
 
 const joinPath = (p: string): string => path.resolve(p)
 
@@ -65,9 +66,13 @@ const getComponents = (): any[] => {
   }
 }
 
-const getWebs = (): any[] => {
+const getWebs = (req: Request): any[] => {
   try {
-    return JSON.parse(fs.readFileSync(PATHS.serverdb, 'utf8')) as any[]
+    const { isLogin } = req.body
+    return filterLoginData(
+      JSON.parse(fs.readFileSync(PATHS.serverdb, 'utf8')),
+      isLogin
+    ) as any[]
   } catch {
     return []
   }
@@ -175,7 +180,7 @@ app.post(
         const isExistsindexHtml = fs.existsSync(PATHS.html.index)
         if (isExistsindexHtml) {
           const indexHtml = fs.readFileSync(PATHS.html.index, 'utf8')
-          const webs = getWebs()
+          const webs = getWebs(req)
           const settings = JSON.parse(content)
           const seoTemplate = writeSEO(webs, { settings })
           const html = writeTemplate({
@@ -253,7 +258,7 @@ app.post('/api/contents/get', (req: Request, res: Response) => {
     components: [],
   }
   try {
-    params.webs = getWebs()
+    params.webs = getWebs(req)
     params.settings = getSettings()
     params.components = getComponents()
     params.tags = getTags()
@@ -273,7 +278,7 @@ app.post('/api/contents/get', (req: Request, res: Response) => {
 
 app.post('/api/spider', async (req: Request, res: Response) => {
   try {
-    const webs = getWebs()
+    const webs = getWebs(req)
     const settings = getSettings()
     const { time, webs: w, errorUrlCount } = await spiderWeb(webs, settings)
     settings.errorUrlCount = errorUrlCount
