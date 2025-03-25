@@ -23,6 +23,8 @@ import {
   writeSEO,
   writeTemplate,
   PATHS,
+  fileWriteStream,
+  fileReadStream,
 } from '../../scripts/utils'
 import type {
   ISettings,
@@ -41,9 +43,9 @@ import { filterLoginData } from '../utils/pureUtils'
 
 const joinPath = (p: string): string => path.resolve(p)
 
-const getConfigJson = () =>
-  yaml.load(fs.readFileSync(PATHS.config, 'utf8')) as any
-const PORT = getConfigJson().port
+const getConfig = () => yaml.load(fs.readFileSync(PATHS.config, 'utf8')) as any
+
+const PORT = getConfig().port
 
 const getSettings = () =>
   JSON.parse(fs.readFileSync(PATHS.settings, 'utf8')) as ISettings
@@ -66,21 +68,17 @@ const getComponents = (): any[] => {
   }
 }
 
-const getWebs = (req: Request): any[] => {
-  try {
-    const { isLogin } = req.body
-    return filterLoginData(
-      JSON.parse(fs.readFileSync(PATHS.serverdb, 'utf8')),
-      isLogin
-    ) as any[]
-  } catch {
-    return []
-  }
+const getWebs = async (req: Request): Promise<any[]> => {
+  const { isLogin } = req.body
+  const data = await fileReadStream(PATHS.serverdb)
+  return filterLoginData(JSON.parse(data), isLogin)
 }
 
-const writeWebs = (data: any[]) => {
-  fs.writeFileSync(PATHS.db, JSON.stringify(data))
-  fs.writeFileSync(PATHS.serverdb, JSON.stringify(data))
+const writeWebs = async (data: any[]) => {
+  return Promise.all([
+    fileWriteStream(PATHS.db, data),
+    fileWriteStream(PATHS.serverdb, data),
+  ])
 }
 
 async function changePermissions() {
@@ -135,7 +133,7 @@ app.use(express.static('dist/browser'))
 app.use(express.static('_upload'))
 
 async function sendMail() {
-  const mailConfig = getConfigJson().mailConfig
+  const mailConfig = getConfig().mailConfig
   const transporter = nodemailer.createTransport({
     ...mailConfig,
     message: undefined,
@@ -143,7 +141,7 @@ async function sendMail() {
   })
   await transporter.sendMail({
     from: mailConfig.auth.user,
-    to: getSettings().email || getConfigJson().email,
+    to: getSettings().email || getConfig().email,
     subject: mailConfig.title || '',
     html: mailConfig.message || '',
   })
@@ -151,7 +149,7 @@ async function sendMail() {
 
 function verifyMiddleware(req: Request, res: Response, next: NextFunction) {
   const token = req.headers['authorization']
-  if (token !== `token ${getConfigJson().password}`) {
+  if (token !== `token ${getConfig().password}`) {
     res.status(401).json({
       status: 401,
       message: 'Bad credentials',
@@ -172,15 +170,15 @@ app.get(
 app.post(
   '/api/contents/update',
   verifyMiddleware,
-  (req: Request, res: Response) => {
+  async (req: Request, res: Response) => {
     const { path } = req.body
     let { content } = req.body
     try {
       if (path.includes('settings.json')) {
         const isExistsindexHtml = fs.existsSync(PATHS.html.index)
         if (isExistsindexHtml) {
-          const indexHtml = fs.readFileSync(PATHS.html.index, 'utf8')
-          const webs = getWebs(req)
+          const indexHtml = await fileReadStream(PATHS.html.index)
+          const webs = await getWebs(req)
           const settings = JSON.parse(content)
           const seoTemplate = writeSEO(webs, { settings })
           const html = writeTemplate({
@@ -188,18 +186,18 @@ app.post(
             settings,
             seoTemplate,
           })
-          fs.writeFileSync(PATHS.html.index, html)
+          await fileWriteStream(PATHS.html.index, html)
         }
       } else if (path.includes('db.json')) {
         content = setWebs(JSON.parse(content), getSettings(), getTags())
-        writeWebs(content)
+        await writeWebs(content)
         res.json({
           status: true,
         })
         return
       }
 
-      fs.writeFileSync(joinPath(path), content)
+      await fileWriteStream(joinPath(path), content)
       res.json({
         status: true,
       })
@@ -229,7 +227,7 @@ app.post(
       const imagePath = `/images/${filePath}`
       res.json({
         imagePath,
-        fullImagePath: getConfigJson().address + imagePath,
+        fullImagePath: getConfig().address + imagePath,
       })
     } catch (error) {
       res.status(500).json({
@@ -248,7 +246,7 @@ interface Contents {
   components: any[]
 }
 
-app.post('/api/contents/get', (req: Request, res: Response) => {
+app.post('/api/contents/get', async (req: Request, res: Response) => {
   const params: Contents = {
     webs: [],
     settings: {} as ISettings,
@@ -258,7 +256,7 @@ app.post('/api/contents/get', (req: Request, res: Response) => {
     components: [],
   }
   try {
-    params.webs = getWebs(req)
+    params.webs = await getWebs(req)
     params.settings = getSettings()
     params.components = getComponents()
     params.tags = getTags()
@@ -278,11 +276,11 @@ app.post('/api/contents/get', (req: Request, res: Response) => {
 
 app.post('/api/spider', async (req: Request, res: Response) => {
   try {
-    const webs = getWebs(req)
+    const webs = await getWebs(req)
     const settings = getSettings()
     const { time, webs: w, errorUrlCount } = await spiderWeb(webs, settings)
     settings.errorUrlCount = errorUrlCount
-    writeWebs(w)
+    await writeWebs(w)
     fs.writeFileSync(PATHS.settings, JSON.stringify(settings))
     res.json({
       time,
@@ -294,64 +292,76 @@ app.post('/api/spider', async (req: Request, res: Response) => {
   }
 })
 
-app.post('/api/collect/get', async (req: Request, res: Response) => {
-  try {
-    const collects = getCollects()
-    res.json({
-      data: collects,
-      count: collects.length,
-    })
-  } catch (error) {
-    res.json({
-      data: [],
-      count: 0,
-      message: (error as Error).message,
-    })
+app.post(
+  '/api/collect/get',
+  verifyMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const collects = getCollects()
+      res.json({
+        data: collects,
+        count: collects.length,
+      })
+    } catch (error) {
+      res.json({
+        data: [],
+        count: 0,
+        message: (error as Error).message,
+      })
+    }
   }
-})
+)
 
-app.post('/api/collect/delete', async (req: Request, res: Response) => {
-  try {
-    const { data } = req.body
-    const collects = getCollects().filter((e) => {
-      const has = data.some(
-        (item: IWebProps) => item['extra'].uuid === e['extra'].uuid
-      )
-      return !has
-    })
-    fs.writeFileSync(PATHS.collect, JSON.stringify(collects))
-    res.json({
-      data: collects,
-    })
-  } catch (error) {
-    res.json({
-      data: [],
-      message: (error as Error).message,
-    })
+app.post(
+  '/api/collect/delete',
+  verifyMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const { data } = req.body
+      const collects = getCollects().filter((e) => {
+        const has = data.some(
+          (item: IWebProps) => item['extra'].uuid === e['extra'].uuid
+        )
+        return !has
+      })
+      fs.writeFileSync(PATHS.collect, JSON.stringify(collects))
+      res.json({
+        data: collects,
+      })
+    } catch (error) {
+      res.json({
+        data: [],
+        message: (error as Error).message,
+      })
+    }
   }
-})
+)
 
-app.post('/api/collect/save', async (req: Request, res: Response) => {
-  try {
-    const { data } = req.body
-    data.extra.uuid = Date.now()
-    data.createdAt = dayjs().format('YYYY-MM-DD HH:mm')
-    const collects = getCollects()
-    collects.unshift(data)
-    fs.writeFileSync(PATHS.collect, JSON.stringify(collects))
-    sendMail().catch((e) => {
-      console.log(e.message)
+app.post(
+  '/api/collect/save',
+  verifyMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const { data } = req.body
+      data.extra.uuid = Date.now()
+      data.createdAt = dayjs().format('YYYY-MM-DD HH:mm')
+      const collects = getCollects()
+      collects.unshift(data)
+      fs.writeFileSync(PATHS.collect, JSON.stringify(collects))
+      sendMail().catch((e) => {
+        console.log(e.message)
+      })
+    } catch (error) {
+      res.status(500).json({
+        message: (error as Error).message,
+      })
+      return
+    }
+    res.json({
+      message: 'OK',
     })
-  } catch (error) {
-    res.status(500).json({
-      message: (error as Error).message,
-    })
-    return
   }
-  res.json({
-    message: 'OK',
-  })
-})
+)
 
 app.post('/api/web/info', async (req: Request, res: Response) => {
   try {
@@ -379,7 +389,7 @@ app.post('/api/translate', async (req: Request, res: Response) => {
   const { content, language } = req.body
 
   try {
-    const token = getConfigJson().XFAPIPassword
+    const token = getConfig().XFAPIPassword
     if (!token) {
       const { data } = await axios.post(
         `${HTTP_BASE_URL}/api/translate`,
@@ -477,6 +487,51 @@ app.post('/api/screenshot', async (req: Request, res: Response) => {
   }
 })
 
-app.listen(PORT, () => {
+app.post(
+  '/api/config/get',
+  verifyMiddleware,
+  async (req: Request, res: Response) => {
+    res.json({
+      ...getConfig(),
+    })
+  }
+)
+
+app.post(
+  '/api/config/update',
+  verifyMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const payload = {
+        ...getConfig(),
+        ...req.body,
+      }
+      const data = yaml.dump(payload)
+      await fsPromises.writeFile(PATHS.config, data)
+      let indexHtml = await fileReadStream(PATHS.html.index)
+
+      const strs = `
+<script>
+window.__HASH_MODE__ = ${payload.hashMode};
+window.__ADDRESS__ = "${payload.address}";
+</script>      
+`.trim()
+      indexHtml = indexHtml.replace(
+        /(<!-- nav\.const-start -->)(.|\s)*?(<!-- nav.const-end -->)/i,
+        `$1${strs}$3`
+      )
+      await fileWriteStream(PATHS.html.index, indexHtml)
+      res.json({
+        status: true,
+      })
+    } catch (error) {
+      res.status(500).json({
+        message: (error as Error).message,
+      })
+    }
+  }
+)
+
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port :${PORT}`)
 })

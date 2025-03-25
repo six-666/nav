@@ -1,6 +1,8 @@
 node_modules
 _upload
 dist
+log
+logs
 .angular
 .vscode
 .github
