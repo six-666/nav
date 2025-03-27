@@ -337,31 +337,27 @@ app.post(
   }
 )
 
-app.post(
-  '/api/collect/save',
-  verifyMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const { data } = req.body
-      data.extra.uuid = Date.now()
-      data.createdAt = dayjs().format('YYYY-MM-DD HH:mm')
-      const collects = getCollects()
-      collects.unshift(data)
-      fs.writeFileSync(PATHS.collect, JSON.stringify(collects))
-      sendMail().catch((e) => {
-        console.log(e.message)
-      })
-    } catch (error) {
-      res.status(500).json({
-        message: (error as Error).message,
-      })
-      return
-    }
-    res.json({
-      message: 'OK',
+app.post('/api/collect/save', async (req: Request, res: Response) => {
+  try {
+    const { data } = req.body
+    data.extra.uuid = Date.now()
+    data.createdAt = dayjs().format('YYYY-MM-DD HH:mm')
+    const collects = getCollects()
+    collects.unshift(data)
+    fs.writeFileSync(PATHS.collect, JSON.stringify(collects))
+    sendMail().catch((e) => {
+      console.log(e.message)
     })
+  } catch (error) {
+    res.status(500).json({
+      message: (error as Error).message,
+    })
+    return
   }
-)
+  res.json({
+    message: 'OK',
+  })
+})
 
 app.post('/api/web/info', async (req: Request, res: Response) => {
   try {

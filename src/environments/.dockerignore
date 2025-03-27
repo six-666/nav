@@ -6,4 +6,12 @@ logs
 .angular
 .vscode
 .github
+.next
 src/index.html
+npm-debug.log
+Dockerfile*
+docker-compose*
+.dockerignore
+.git
+README.md
+LICENSE
