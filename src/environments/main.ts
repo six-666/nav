@@ -68,9 +68,13 @@ const getComponents = (): any[] => {
   }
 }
 
-const getWebs = async (req: Request): Promise<any[]> => {
+const getWebs = async (req: Request, isFilter = true): Promise<any[]> => {
   const { isLogin } = req.body
   const data = await fileReadStream(PATHS.serverdb)
+  const parseData = JSON.parse(data)
+  if (!isFilter) {
+    return parseData
+  }
   return filterLoginData(JSON.parse(data), isLogin)
 }
 
@@ -247,6 +251,7 @@ interface Contents {
 }
 
 app.post('/api/contents/get', async (req: Request, res: Response) => {
+  const { isLogin } = req.body
   const params: Contents = {
     webs: [],
     settings: {} as ISettings,
@@ -256,7 +261,7 @@ app.post('/api/contents/get', async (req: Request, res: Response) => {
     components: [],
   }
   try {
-    params.webs = await getWebs(req)
+    params.webs = await getWebs(req, false)
     params.settings = getSettings()
     params.components = getComponents()
     params.tags = getTags()
@@ -264,7 +269,10 @@ app.post('/api/contents/get', async (req: Request, res: Response) => {
     const { userViewCount, loginViewCount } = getWebCount(params.webs)
     params.internal.userViewCount = userViewCount
     params.internal.loginViewCount = loginViewCount
-    params.webs = setWebs(params.webs, params.settings, params.tags)
+    params.webs = filterLoginData(
+      setWebs(params.webs, params.settings, params.tags),
+      isLogin
+    )
     res.json(params)
     return
   } catch (error) {
