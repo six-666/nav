@@ -19,7 +19,7 @@ import yaml from 'js-yaml'
 import {
   getWebCount,
   setWebs,
-  spiderWeb,
+  spiderWebs,
   writeSEO,
   writeTemplate,
   PATHS,
@@ -40,6 +40,7 @@ import axios from 'axios'
 import sharp from 'sharp'
 import findChrome from 'chrome-finder'
 import { filterLoginData } from '../utils/pureUtils'
+import puppeteer from 'puppeteer'
 
 const joinPath = (p: string): string => path.resolve(p)
 
@@ -149,6 +150,63 @@ async function sendMail() {
     subject: mailConfig.title || '',
     html: mailConfig.message || '',
   })
+}
+
+async function generateScreenshot(req: Request) {
+  const params: any = {
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
+  }
+  try {
+    const { width, height, resizeWidth, resizeHeight } = req.body
+    let url = req.body.url
+    if (url[0] === SELF_SYMBOL) {
+      url = url.slice(1)
+    }
+    new URL(url)
+
+    try {
+      const chromePath = findChrome()
+      params.executablePath = chromePath
+      console.log(`chromePath: ${chromePath}`)
+    } catch (error) {
+      console.log((error as Error).message)
+    }
+    const browser = await puppeteer.launch(params)
+    const page = await browser.newPage()
+    await page.setViewport({
+      width: width || 1280,
+      height: height || 720,
+    })
+    await page.goto(url, { waitUntil: 'networkidle2' })
+    const screenshotBuffer = await page.screenshot()
+    const resizedBase64 = await sharp(screenshotBuffer)
+      .resize(resizeWidth || 400, resizeHeight || 200, { fit: 'cover' })
+      .png()
+      .toBuffer()
+      .then((buffer: Buffer) => buffer.toString('base64'))
+    return {
+      image: resizedBase64,
+    }
+  } catch (error) {
+    try {
+      const resData = await axios.post(
+        `${HTTP_BASE_URL}/api/screenshot`,
+        req.body,
+        {
+          timeout: 0,
+        }
+      )
+      return {
+        ...resData.data,
+      }
+    } catch (error) {
+      throw new Error(
+        `${(error as Error).message}; executablePath: ${
+          params.executablePath || puppeteer.executablePath() || ''
+        }`
+      )
+    }
+  }
 }
 
 function verifyMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -286,13 +344,21 @@ app.post('/api/spider', async (req: Request, res: Response) => {
   try {
     const webs = await getWebs(req)
     const settings = getSettings()
-    const { time, webs: w, errorUrlCount } = await spiderWeb(webs, settings)
+    res.setHeader('Transfer-Encoding', 'chunked')
+    const {
+      time,
+      webs: w,
+      errorUrlCount,
+    } = await spiderWebs(webs, settings, {
+      onOk: (messages) => {
+        res.write(JSON.stringify(messages))
+      },
+    })
     settings.errorUrlCount = errorUrlCount
     await writeWebs(w)
     fs.writeFileSync(PATHS.settings, JSON.stringify(settings))
-    res.json({
-      time,
-    })
+    res.write(JSON.stringify({ time }))
+    res.end()
   } catch (error) {
     res.status(500).json({
       message: (error as Error).message,
@@ -436,58 +502,13 @@ app.post('/api/translate', async (req: Request, res: Response) => {
 })
 
 app.post('/api/screenshot', async (req: Request, res: Response) => {
-  const puppeteer = await import('puppeteer')
-  const params: any = {
-    args: ['--no-sandbox', '--disable-setuid-sandbox'],
-  }
   try {
-    const { width, height, resizeWidth, resizeHeight } = req.body
-    let url = req.body.url
-    if (url[0] === SELF_SYMBOL) {
-      url = url.slice(1)
-    }
-    new URL(url)
-
-    try {
-      const chromePath = findChrome()
-      params.executablePath = chromePath
-      console.log(`chromePath: ${chromePath}`)
-    } catch (error) {
-      console.log((error as Error).message)
-    }
-    const browser = await puppeteer.launch(params)
-    const page = await browser.newPage()
-    await page.setViewport({
-      width: width || 1280,
-      height: height || 720,
-    })
-    await page.goto(url, { waitUntil: 'networkidle2' })
-    const screenshotBuffer = await page.screenshot()
-    const resizedBase64 = await sharp(screenshotBuffer)
-      .resize(resizeWidth || 400, resizeHeight || 200, { fit: 'cover' })
-      .png()
-      .toBuffer()
-      .then((buffer: Buffer) => buffer.toString('base64'))
-    res.json({
-      image: resizedBase64,
-    })
+    const imgData = await generateScreenshot(req)
+    res.json({ ...imgData })
   } catch (error) {
-    try {
-      const resData = await axios.post(
-        `${HTTP_BASE_URL}/api/screenshot`,
-        req.body,
-        {
-          timeout: 0,
-        }
-      )
-      res.json(resData.data)
-    } catch (error) {
-      res.status(500).json({
-        message: `${(error as Error).message}; executablePath: ${
-          params.executablePath || puppeteer.executablePath() || ''
-        }`,
-      })
-    }
+    res.status(500).json({
+      message: (error as Error).message,
+    })
   }
 })
 
