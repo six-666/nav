@@ -39,7 +39,7 @@ import { HTTP_BASE_URL } from '../utils/http'
 import axios from 'axios'
 import sharp from 'sharp'
 import findChrome from 'chrome-finder'
-import { filterLoginData } from '../utils/pureUtils'
+import { filterLoginData, removeTrailingSlashes } from '../utils/pureUtils'
 import puppeteer from 'puppeteer'
 
 const joinPath = (p: string): string => path.resolve(p)
@@ -287,9 +287,10 @@ app.post(
       const uploadPath = path.resolve(PATHS.upload, filePath)
       fs.writeFileSync(uploadPath, dataBuffer)
       const imagePath = `/images/${filePath}`
+      const baseUrl = removeTrailingSlashes(getConfig().address)
       res.json({
         imagePath,
-        fullImagePath: getConfig().address + imagePath,
+        fullImagePath: baseUrl + imagePath,
       })
     } catch (error) {
       res.status(500).json({
