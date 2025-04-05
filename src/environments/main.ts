@@ -528,27 +528,36 @@ app.post(
   verifyMiddleware,
   async (req: Request, res: Response) => {
     try {
-      const payload = {
-        ...getConfig(),
-        ...req.body,
-      }
-      const data = yaml.dump(payload)
-      await fsPromises.writeFile(PATHS.config, data)
-      let indexHtml = await fileReadStream(PATHS.html.index)
+      const isExistsindexHtml = fs.existsSync(PATHS.html.index)
+      if (isExistsindexHtml) {
+        const payload = {
+          ...getConfig(),
+          ...req.body,
+        }
+        const data = yaml.dump(payload)
+        await fsPromises.writeFile(PATHS.config, data)
+        let indexHtml = await fileReadStream(PATHS.html.index)
 
-      const strs = `
-<script>
-window.__HASH_MODE__ = ${payload.hashMode};
-window.__ADDRESS__ = "${payload.address}";
-</script>      
-`.trim()
-      indexHtml = indexHtml.replace(
-        /(<!-- nav\.const-start -->)(.|\s)*?(<!-- nav.const-end -->)/i,
-        `$1${strs}$3`
-      )
-      await fileWriteStream(PATHS.html.index, indexHtml)
+        const strs = `
+  <script>
+  window.__HASH_MODE__ = ${payload.hashMode};
+  window.__ADDRESS__ = "${payload.address}";
+  </script>      
+  `.trim()
+        indexHtml = indexHtml.replace(
+          /(<!-- nav\.const-start -->)(.|\s)*?(<!-- nav.const-end -->)/i,
+          `$1${strs}$3`
+        )
+        await fileWriteStream(PATHS.html.index, indexHtml)
+        res.json({
+          status: true,
+        })
+        return
+      }
+
       res.json({
-        status: true,
+        message: 'Please create index.html first',
+        status: false,
       })
     } catch (error) {
       res.status(500).json({
@@ -559,5 +568,5 @@ window.__ADDRESS__ = "${payload.address}";
 )
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server is running on port :${PORT}`)
+  console.log(`Server is running on port :${PORT} \n`)
 })

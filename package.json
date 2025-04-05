@@ -11,7 +11,9 @@
     "build": "npm run setup && ng build --index src/index.html",
     "watch": "ng build --watch --configuration development",
     "update": "git pull && (git remote add upstream https://gitee.com/xiejiahe/nav.git || true) && git fetch upstream main && git merge upstream/main --allow-unrelated-histories --no-edit && git push",
-    "pull": "git pull"
+    "pull": "git pull",
+    "server": "tsx src/environments/main.ts",
+    "server:prod": "pm2 start --interpreter tsx src/environments/main.ts --name navServer"
   },
   "type": "module",
   "private": true,
