@@ -33,6 +33,7 @@ import type {
   ITagPropValues,
   ISearchProps,
   InternalProps,
+  IComponentProps,
 } from '../types/index'
 import { SELF_SYMBOL } from '../constants/symbol'
 import { HTTP_BASE_URL } from '../utils/http'
@@ -61,11 +62,13 @@ const getCollects = (): IWebProps[] => {
     return []
   }
 }
-const getComponents = (): any[] => {
+const getComponent = (): IComponentProps => {
   try {
-    return JSON.parse(fs.readFileSync(PATHS.component, 'utf8')) as any[]
+    return JSON.parse(
+      fs.readFileSync(PATHS.component, 'utf8')
+    ) as IComponentProps
   } catch {
-    return []
+    return { zoom: 1, components: [] }
   }
 }
 
@@ -306,7 +309,7 @@ interface Contents {
   tags: ITagPropValues[]
   search: ISearchProps[]
   internal: InternalProps
-  components: any[]
+  component: IComponentProps
 }
 
 app.post('/api/contents/get', async (req: Request, res: Response) => {
@@ -317,12 +320,13 @@ app.post('/api/contents/get', async (req: Request, res: Response) => {
     tags: [],
     search: [],
     internal: {} as InternalProps,
-    components: [],
+    // @ts-ignore
+    component: {},
   }
   try {
     params.webs = await getWebs(req, false)
     params.settings = getSettings()
-    params.components = getComponents()
+    params.component = getComponent()
     params.tags = getTags()
     params.search = JSON.parse(fs.readFileSync(PATHS.search, 'utf8'))
     const { userViewCount, loginViewCount } = getWebCount(params.webs)
