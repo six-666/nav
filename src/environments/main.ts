@@ -65,7 +65,7 @@ const getCollects = (): IWebProps[] => {
 const getComponent = (): IComponentProps => {
   try {
     return JSON.parse(
-      fs.readFileSync(PATHS.component, 'utf8')
+      fs.readFileSync(PATHS.component, 'utf8'),
     ) as IComponentProps
   } catch {
     return { zoom: 1, components: [] }
@@ -135,7 +135,7 @@ app.use(
     origin: '*',
     methods: '*',
     allowedHeaders: '*',
-  })
+  }),
 )
 app.use(express.static('dist/browser'))
 app.use(express.static('_upload'))
@@ -197,7 +197,7 @@ async function generateScreenshot(req: Request) {
         req.body,
         {
           timeout: 0,
-        }
+        },
       )
       return {
         ...resData.data,
@@ -206,7 +206,7 @@ async function generateScreenshot(req: Request) {
       throw new Error(
         `${(error as Error).message}; executablePath: ${
           params.executablePath || puppeteer.executablePath() || ''
-        }`
+        }`,
       )
     }
   }
@@ -229,7 +229,7 @@ app.get(
   verifyMiddleware,
   (req: Request, res: Response) => {
     res.json({})
-  }
+  },
 )
 
 app.post(
@@ -271,7 +271,7 @@ app.post(
         message: (error as Error).message,
       })
     }
-  }
+  },
 )
 
 app.post(
@@ -300,7 +300,7 @@ app.post(
         message: (error as Error).message,
       })
     }
-  }
+  },
 )
 
 interface Contents {
@@ -334,7 +334,7 @@ app.post('/api/contents/get', async (req: Request, res: Response) => {
     params.internal.loginViewCount = loginViewCount
     params.webs = filterLoginData(
       setWebs(params.webs, params.settings, params.tags),
-      isLogin
+      isLogin,
     )
     res.json(params)
     return
@@ -388,7 +388,7 @@ app.post(
         message: (error as Error).message,
       })
     }
-  }
+  },
 )
 
 app.post(
@@ -399,7 +399,7 @@ app.post(
       const { data } = req.body
       const collects = getCollects().filter((e) => {
         const has = data.some(
-          (item: IWebProps) => item['extra'].uuid === e['extra'].uuid
+          (item: IWebProps) => item['extra'].uuid === e['extra'].uuid,
         )
         return !has
       })
@@ -413,7 +413,7 @@ app.post(
         message: (error as Error).message,
       })
     }
-  }
+  },
 )
 
 app.post('/api/collect/save', async (req: Request, res: Response) => {
@@ -468,7 +468,7 @@ app.post('/api/translate', async (req: Request, res: Response) => {
     if (!token) {
       const { data } = await axios.post(
         `${HTTP_BASE_URL}/api/translate`,
-        req.body
+        req.body,
       )
       res.json(data)
       return
@@ -492,7 +492,7 @@ app.post('/api/translate', async (req: Request, res: Response) => {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-      }
+      },
     )
 
     res.json({
@@ -524,7 +524,7 @@ app.post(
     res.json({
       ...getConfig(),
     })
-  }
+  },
 )
 
 app.post(
@@ -550,7 +550,7 @@ app.post(
   `.trim()
         indexHtml = indexHtml.replace(
           /(<!-- nav\.const-start -->)(.|\s)*?(<!-- nav.const-end -->)/i,
-          `$1${strs}$3`
+          `$1${strs}$3`,
         )
         await fileWriteStream(PATHS.html.index, indexHtml)
         res.json({
@@ -568,7 +568,7 @@ app.post(
         message: (error as Error).message,
       })
     }
-  }
+  },
 )
 
 app.listen(PORT, '0.0.0.0', () => {
