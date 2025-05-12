@@ -42,6 +42,7 @@ import sharp from 'sharp'
 import findChrome from 'chrome-finder'
 import { filterLoginData, removeTrailingSlashes } from '../utils/pureUtils'
 import puppeteer from 'puppeteer'
+import { CronJob } from 'cron'
 
 const joinPath = (p: string): string => path.resolve(p)
 
@@ -54,6 +55,15 @@ const getSettings = () =>
 
 const getTags = () =>
   JSON.parse(fs.readFileSync(PATHS.tag, 'utf8')) as ITagPropValues[]
+
+const getNews = () => {
+  try {
+    return JSON.parse(fs.readFileSync(PATHS.news, 'utf8')) as any[]
+  } catch {
+    return []
+  }
+}
+
 const getCollects = (): IWebProps[] => {
   try {
     const data = JSON.parse(fs.readFileSync(PATHS.collect, 'utf8'))
@@ -481,9 +491,9 @@ app.post('/api/translate', async (req: Request, res: Response) => {
         messages: [
           {
             role: 'user',
-            content: `${content} 翻译${
+            content: `请将 "${content}" 翻译成${
               language === 'zh-CN' ? '中文' : '英文'
-            }，直接返回翻译的内容，如果不能翻译返回原内容`,
+            }，只返回翻译内容，如果不能翻译请不要返回任何信息`,
           },
         ],
         stream: false,
@@ -496,7 +506,7 @@ app.post('/api/translate', async (req: Request, res: Response) => {
     )
 
     res.json({
-      content: data.choices[0].message.content,
+      content: data.choices[0].delta.content,
     })
     return
   } catch (error: any) {
@@ -570,6 +580,55 @@ app.post(
     }
   },
 )
+
+function pullNews() {
+  const settings = getSettings()
+  axios
+    .get(`https://${settings.gitHubCDN}/gh/six-666/news/news.json`)
+    .then((res) => {
+      const data = res.data
+      fileWriteStream(PATHS.news, data)
+      console.log('资讯新闻更新成功')
+    })
+    .catch((err) => {
+      console.log(err)
+    })
+}
+
+const job = CronJob.from({
+  cronTime: '0 */3 * * *',
+  onTick: function () {
+    pullNews()
+  },
+  start: true,
+})
+
+pullNews()
+
+app.post('/api/news', async (req: Request, res: Response) => {
+  let news = getNews()
+  let map: Record<string, any> = {}
+  const { types, count } = req.body
+  if (types && types.length > 0) {
+    news = news.filter((item) => types.includes(item.type))
+  }
+  for (const item of news) {
+    if (!map[item.type]) {
+      map[item.type] = [item]
+    } else {
+      map[item.type].push(item)
+    }
+  }
+  if (count != null && count > 0) {
+    for (const key in map) {
+      map[key] = map[key].slice(0, count)
+    }
+  }
+  res.json({
+    status: true,
+    ...map,
+  })
+})
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port :${PORT} \n`)
