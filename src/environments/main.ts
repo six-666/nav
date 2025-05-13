@@ -43,6 +43,7 @@ import findChrome from 'chrome-finder'
 import { filterLoginData, removeTrailingSlashes } from '../utils/pureUtils'
 import puppeteer from 'puppeteer'
 import { CronJob } from 'cron'
+import type { SendMailOptions } from 'nodemailer'
 
 const joinPath = (p: string): string => path.resolve(p)
 
@@ -55,6 +56,9 @@ const getSettings = () =>
 
 const getTags = () =>
   JSON.parse(fs.readFileSync(PATHS.tag, 'utf8')) as ITagPropValues[]
+
+const getSearchs = () =>
+  JSON.parse(fs.readFileSync(PATHS.search, 'utf8')) as ISearchProps[]
 
 const getNews = () => {
   try {
@@ -135,6 +139,40 @@ try {
   console.log((error as Error).message)
 }
 
+async function backupData() {
+  try {
+    const params: any = {
+      db: JSON.parse(await fileReadStream(PATHS.serverdb)),
+      settings: getSettings(),
+      tag: getTags(),
+      search: getSearchs(),
+      component: getComponent(),
+    }
+    await sendMail({
+      subject: `${params.settings.title} 数据备份`,
+      html: '',
+      attachments: [
+        {
+          filename: `${dayjs().format('YYYYMMDD')}.json`,
+          content: JSON.stringify(params),
+          contentType: 'application/json',
+        },
+      ],
+    })
+    console.log('数据备份成功')
+  } catch (error) {
+    console.log('数据备份失败', (error as Error).message)
+  }
+}
+
+const backupJob = CronJob.from({
+  cronTime: '0 12 * * *',
+  onTick: function () {
+    backupData()
+  },
+  start: true,
+})
+
 const app = express()
 app.use(compression())
 app.use(history())
@@ -150,18 +188,17 @@ app.use(
 app.use(express.static('dist/browser'))
 app.use(express.static('_upload'))
 
-async function sendMail() {
-  const mailConfig = getConfig().mailConfig
+async function sendMail(mailOptions?: SendMailOptions) {
+  const { message, title, ...mailConfig } = getConfig().mailConfig
   const transporter = nodemailer.createTransport({
     ...mailConfig,
-    message: undefined,
-    title: undefined,
   })
-  await transporter.sendMail({
+  return transporter.sendMail({
     from: mailConfig.auth.user,
     to: getSettings().email || getConfig().email,
     subject: mailConfig.title || '',
     html: mailConfig.message || '',
+    ...mailOptions,
   })
 }
 
@@ -338,7 +375,7 @@ app.post('/api/contents/get', async (req: Request, res: Response) => {
     params.settings = getSettings()
     params.component = getComponent()
     params.tags = getTags()
-    params.search = JSON.parse(fs.readFileSync(PATHS.search, 'utf8'))
+    params.search = getSearchs()
     const { userViewCount, loginViewCount } = getWebCount(params.webs)
     params.internal.userViewCount = userViewCount
     params.internal.loginViewCount = loginViewCount
@@ -595,7 +632,7 @@ function pullNews() {
     })
 }
 
-const job = CronJob.from({
+const pullNewsJob = CronJob.from({
   cronTime: '0 */3 * * *',
   onTick: function () {
     pullNews()
