@@ -86,7 +86,7 @@ const getComponent = (): IComponentProps => {
   }
 }
 
-const getWebs = async (req: Request, isFilter = true): Promise<any[]> => {
+const getNavs = async (req: Request, isFilter = true): Promise<any[]> => {
   const { isLogin } = req.body
   const data = await fileReadStream(PATHS.serverdb)
   const parseData = JSON.parse(data)
@@ -260,8 +260,10 @@ async function generateScreenshot(req: Request) {
 }
 
 function verifyMiddleware(req: Request, res: Response, next: NextFunction) {
-  const token = req.headers['authorization']
-  if (token !== `token ${getConfig().password}`) {
+  let token = req.headers['authorization'] || ''
+  token = token.replace(/^Bearer /i, '')
+  token = token.replace(/^token /i, '')
+  if (token !== getConfig().password) {
     res.status(401).json({
       status: 401,
       message: 'Bad credentials',
@@ -290,7 +292,7 @@ app.post(
         const isExistsindexHtml = fs.existsSync(PATHS.html.index)
         if (isExistsindexHtml) {
           const indexHtml = await fileReadStream(PATHS.html.index)
-          const webs = await getWebs(req)
+          const webs = await getNavs(req)
           const settings = JSON.parse(content)
           const seoTemplate = writeSEO(webs, { settings })
           const html = writeTemplate({
@@ -371,7 +373,7 @@ app.post('/api/contents/get', async (req: Request, res: Response) => {
     component: {},
   }
   try {
-    params.webs = await getWebs(req, false)
+    params.webs = await getNavs(req, false)
     params.settings = getSettings()
     params.component = getComponent()
     params.tags = getTags()
@@ -394,7 +396,7 @@ app.post('/api/contents/get', async (req: Request, res: Response) => {
 
 app.post('/api/spider', async (req: Request, res: Response) => {
   try {
-    const webs = await getWebs(req)
+    const webs = await getNavs(req)
     const settings = getSettings()
     res.setHeader('Transfer-Encoding', 'chunked')
     const {
