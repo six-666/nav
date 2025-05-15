@@ -25,6 +25,7 @@ import {
   PATHS,
   fileWriteStream,
   fileReadStream,
+  writePWA,
 } from '../../scripts/utils'
 import type {
   ISettings,
@@ -112,16 +113,17 @@ async function changePermissions() {
     PATHS.search,
     PATHS.html.index,
     PATHS.component,
-    PATHS.upload,
+    PATHS.uploadImage,
+    PATHS.manifest,
   ]
   for (const path of paths) {
     try {
       const stats = await fsPromises.stat(path)
       if ((stats.mode & 0o777) !== 0o777) {
         await fsPromises.chmod(path, 0o777)
-        console.log(`Permissions changed for ${path}`)
+        console.log(`${path} NO PERMISSIONS`)
       } else {
-        console.log(`${path} already has correct permissions`)
+        console.log(`${path} OK`)
       }
     } catch (error: any) {
       console.error(`Error for ${path}: ${error.message}`)
@@ -148,13 +150,15 @@ async function backupData() {
       search: getSearchs(),
       component: getComponent(),
     }
+    const json = JSON.stringify(params)
+    fileWriteStream(PATHS.backup, json)
     await sendMail({
       subject: `${params.settings.title} 数据备份`,
       html: '',
       attachments: [
         {
           filename: `${dayjs().format('YYYYMMDD')}.json`,
-          content: JSON.stringify(params),
+          content: json,
           contentType: 'application/json',
         },
       ],
@@ -300,6 +304,7 @@ app.post(
             settings,
             seoTemplate,
           })
+          writePWA(settings, PATHS.manifest)
           await fileWriteStream(PATHS.html.index, html)
         }
       } else if (path.includes('db.json')) {
@@ -330,13 +335,13 @@ app.post(
     const { path: filePath, content } = req.body
     try {
       try {
-        fs.statSync(PATHS.upload)
+        fs.statSync(PATHS.uploadImage)
       } catch (error) {
-        fs.mkdirSync(PATHS.upload, { recursive: true })
+        fs.mkdirSync(PATHS.uploadImage, { recursive: true })
       }
 
       const dataBuffer = Buffer.from(content, 'base64')
-      const uploadPath = path.resolve(PATHS.upload, filePath)
+      const uploadPath = path.resolve(PATHS.uploadImage, filePath)
       fs.writeFileSync(uploadPath, dataBuffer)
       const imagePath = `/images/${filePath}`
       const baseUrl = removeTrailingSlashes(getConfig().address)
@@ -630,7 +635,7 @@ function pullNews() {
       console.log('资讯新闻更新成功')
     })
     .catch((err) => {
-      console.log(err)
+      console.log('资讯新闻获取失败', err.message)
     })
 }
 
