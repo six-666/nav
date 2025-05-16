@@ -357,6 +357,29 @@ app.post(
   },
 )
 
+app.post(
+  '/api/file/create',
+  verifyMiddleware,
+  async (req: Request, res: Response) => {
+    const { path: filePath, content } = req.body
+    try {
+      const dataBuffer = Buffer.from(content, 'base64')
+      await Promise.allSettled([
+        fsPromises.writeFile(path.resolve(PATHS.root, filePath), dataBuffer),
+        fsPromises.writeFile(path.resolve(PATHS.public, filePath), dataBuffer),
+      ])
+      const baseUrl = removeTrailingSlashes(getConfig().address)
+      res.json({
+        filePath: `${baseUrl}/${filePath}`,
+      })
+    } catch (error) {
+      res.status(500).json({
+        message: (error as Error).message,
+      })
+    }
+  },
+)
+
 interface Contents {
   settings: ISettings
   webs: INavProps[]
