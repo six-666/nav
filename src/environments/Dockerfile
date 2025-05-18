@@ -10,6 +10,8 @@ COPY . /app/
 
 RUN npm run build
 
+VOLUME ["/app/data", "/app/_upload"]
+
 EXPOSE 7777
 
-CMD ["pm2-runtime", "start", "--interpreter", "tsx", "src/environments/main.ts"]
+CMD ["sh", "-c", "npm run init && pm2-runtime start --interpreter tsx src/environments/main.ts"]
